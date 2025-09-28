@@ -6,6 +6,9 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Scripts directories
+scripts/
+
 # Logs and temp files
 *.log
 *.tmp
