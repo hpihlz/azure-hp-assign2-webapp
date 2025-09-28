@@ -1,0 +1,15 @@
+# containerapp.yaml
+properties:
+  configuration:
+    ingress:
+      external: true
+      targetPort: 80
+      transport: auto
+    activeRevisionsMode: Single
+  template:
+    containers:
+      - name: web
+        image: REPLACED_BY_ACTION   # the deploy action fills this in
+        resources:
+          cpu: 0.25
+          memory: 0.5Gi
