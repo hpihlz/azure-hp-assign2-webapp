@@ -5,12 +5,10 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
-# Avoid overlapping deploys to the same app
 concurrency:
   group: deploy-azurewebapp
   cancel-in-progress: true
 
-# Needed for OIDC + source checkout
 permissions:
   id-token: write
   contents: read
@@ -21,19 +19,17 @@ env:
   CONTAINER_APP_NAME: azurewebapp
   CONTAINER_APP_ENV: AzureWebApp-CAE
   LOCATION: northeurope
-  # Optional: customize the image name/tag that will be built
   IMAGE_NAME: azurewebapp
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # --- Azure login via OIDC (no secrets needed beyond IDs) ---
+      # --- Azure login via OIDC (uses repo secrets with IDs only) ---
       - name: Azure login
         uses: azure/login@v2
         with:
@@ -41,7 +37,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # --- Quick diagnostics to confirm OIDC & access scopes ---
+      # --- Diagnostics to confirm identity & access (optional but useful) ---
       - name: Who am I in Azure?
         run: |
           echo "== Account =="
@@ -58,29 +54,21 @@ jobs:
           echo "== Container App (may not exist yet) =="
           az containerapp show -n $CONTAINER_APP_NAME -g $AZURE_RESOURCE_GROUP --out table || true
 
-      # --- Build & deploy in one go ---
-      # This action will:
-      #  - build your Dockerfile found at repo root (uses appSourcePath)
-      #  - push to ACR ($ACR_NAME)
-      #  - create/update the Container App in your RG
-      #  - apply settings from containerapp.yaml (ingress/port/resources)
+      # --- Build & deploy (NO yamlConfigPath) ---
       - name: Build and deploy Container App
         uses: azure/container-apps-deploy-action@v1
         with:
           appSourcePath: ${{ github.workspace }}
-          # If your Dockerfile is not at repo root, set dockerfilePath: path/to/Dockerfile
           acrName: ${{ env.ACR_NAME }}
           resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
           containerAppName: ${{ env.CONTAINER_APP_NAME }}
           containerAppEnvironment: ${{ env.CONTAINER_APP_ENV }}
           location: ${{ env.LOCATION }}
-          yamlConfigPath: containerapp.yaml
-          # Use a stable image name + unique tag per commit
+          ingress: external
+          targetPort: 80
           imageToBuild: ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-          # If you already built & pushed the image elsewhere, you could use:
-          # imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
-      # --- Optional: show the app URL after deploy ---
+      # --- Show the public URL when ready ---
       - name: Show app URL
         if: always()
         run: |
@@ -88,5 +76,5 @@ jobs:
           if [ -n "$FQDN" ]; then
             echo "✅ Deployed: https://$FQDN"
           else
-            echo "Deployment finished. If this is the first create, the FQDN may appear a bit later."
+            echo "Deployment finished. If this is the first create, the FQDN may appear shortly."
           fi
