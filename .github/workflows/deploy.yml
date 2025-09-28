@@ -25,11 +25,12 @@ env:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # --- Azure login via OIDC (uses repo secrets with IDs only) ---
+      # --- Azure login via OIDC ---
       - name: Azure login
         uses: azure/login@v2
         with:
@@ -37,7 +38,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # --- Diagnostics to confirm identity & access (optional but useful) ---
+      # --- Diagnostics (optional but useful) ---
       - name: Who am I in Azure?
         run: |
           echo "== Account =="
@@ -54,21 +55,37 @@ jobs:
           echo "== Container App (may not exist yet) =="
           az containerapp show -n $CONTAINER_APP_NAME -g $AZURE_RESOURCE_GROUP --out table || true
 
-      # --- Build & deploy (NO yamlConfigPath) ---
-      - name: Build and deploy Container App
-        uses: azure/container-apps-deploy-action@v1
-        with:
-          appSourcePath: ${{ github.workspace }}
-          acrName: ${{ env.ACR_NAME }}
-          resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
-          containerAppName: ${{ env.CONTAINER_APP_NAME }}
-          containerAppEnvironment: ${{ env.CONTAINER_APP_ENV }}
-          location: ${{ env.LOCATION }}
-          ingress: external
-          targetPort: 80
-          imageToBuild: ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+      # --- Build & push to ACR using OIDC (no registry passwords) ---
+      - name: ACR login (token via az)
+        run: az acr login --name $ACR_NAME
 
-      # --- Show the public URL when ready ---
+      - name: Build image
+        run: |
+          IMAGE="$ACR_NAME.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+          echo "Building $IMAGE"
+          docker build -t "$IMAGE" .
+
+      - name: Push image
+        run: |
+          IMAGE="$ACR_NAME.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+          echo "Pushing $IMAGE"
+          docker push "$IMAGE"
+
+      # --- Update Container App to use the new image ---
+      # Requires the app to already be configured to pull via its managed identity:
+      #   az containerapp identity assign -g RG -n APP --system-assigned
+      #   az role assignment create --assignee <APP_PRINCIPAL_ID> --role AcrPull --scope <ACR_ID>
+      #   az containerapp registry set -g RG -n APP --server <ACR_LOGIN_SERVER> --identity system
+      - name: Update Container App
+        run: |
+          IMAGE="$ACR_NAME.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
+          az containerapp update \
+            -g $AZURE_RESOURCE_GROUP \
+            -n $CONTAINER_APP_NAME \
+            --image "$IMAGE" \
+            --output table
+
+      # --- Show the public URL ---
       - name: Show app URL
         if: always()
         run: |
