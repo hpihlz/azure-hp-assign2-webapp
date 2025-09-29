@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Report an issue</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;padding:2rem;background:#0f172a;color:#e2e8f0}
+    .wrap{max-width:740px;margin:0 auto}
+    a.btn,button.btn{padding:.8rem 1rem;border-radius:10px;border:1px solid #334155;background:#1e293b;color:#e2e8f0;text-decoration:none}
+    .card{background:#111827;border:1px solid #1f2937;border-radius:16px;padding:1.25rem}
+    label{display:block;margin-top:1rem}
+    input,textarea{width:100%;padding:.75rem;border-radius:10px;border:1px solid #334155;background:#0b1220;color:#e2e8f0}
+    .row{display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1rem}
+    #pasteArea{border:1px dashed #334155;min-height:140px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:#0b1220}
+    #preview{max-width:100%;margin-top:.5rem}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <a class="btn" href="index.html">← Back</a>
+    <div class="card">
+      <h2>Report an issue</h2>
+      <form id="f">
+        <label>Name <input required name="name" maxlength="200" /></label>
+        <label>Email <input required type="email" name="email" maxlength="320" /></label>
+        <label>Describe the issue <textarea required name="description" rows="6" maxlength="8000"></textarea></label>
+
+        <label>Paste a screenshot (Cmd/Ctrl+V)</label>
+        <div id="pasteArea">Click here and paste your screenshot</div>
+        <img id="preview" alt="" />
+
+        <div class="row">
+          <button class="btn" type="submit">Submit</button>
+          <a class="btn" href="list.php">List all issues</a>
+        </div>
+      </form>
+      <div id="msg"></div>
+    </div>
+  </div>
+
+  <script>
+    const f = document.getElementById('f');
+    const pasteArea = document.getElementById('pasteArea');
+    const preview = document.getElementById('preview');
+    let pasted = null;
+
+    pasteArea.tabIndex = 0;
+    pasteArea.addEventListener('paste', e => {
+      const item = [...e.clipboardData.items].find(i=>i.type.startsWith('image/'));
+      if (item) {
+        const file = item.getAsFile();
+        const reader = new FileReader();
+        reader.onload = () => { pasted = { mime: file.type, dataURL: reader.result }; preview.src = pasted.dataURL; };
+        reader.readAsDataURL(file);
+        e.preventDefault();
+      }
+    });
+
+    f.addEventListener('submit', async e => {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(f).entries());
+      if (pasted) { data.screenshot_mime = pasted.mime; data.screenshot_base64 = pasted.dataURL.split(',')[1]; }
+      const res = await fetch('api/submit_issue.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const j = await res.json().catch(()=>({ok:false}));
+      document.getElementById('msg').textContent = j.ok ? '✅ Issue submitted' : ('❌ ' + (j.error || 'Failed'));
+      if (j.ok) { f.reset(); pasted=null; preview.removeAttribute('src'); }
+    });
+  </script>
+</body>
+</html>
