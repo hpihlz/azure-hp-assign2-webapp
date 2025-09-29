@@ -1,0 +1,13 @@
+<?php
+require __DIR__.'/../inc/db.php';
+$sql = "CREATE TABLE IF NOT EXISTS issues (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  name VARCHAR(200) NOT NULL,
+  email VARCHAR(320) NOT NULL,
+  description TEXT NOT NULL,
+  screenshot LONGBLOB NULL,
+  screenshot_mime VARCHAR(50) NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
+$pdo->exec($sql);
+echo "ok";
